@@ -1,0 +1,14 @@
+# Telegram Bot Configuration
+BOT_TOKEN=7954243581:AAFB_eQHGwCLRYTGeBwJ3gZWa1qtMDT76Bs
+
+# DeepSeek API Configuration
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key-here
+DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
+
+# Tesseract OCR Path (Windows users may need to set this)
+# TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
+
+# Bot Settings
+MAX_FILE_SIZE=20971520
+QUESTIONS_PER_EXAM=5
+SUPPORTED_LANGUAGES=ara,eng
