@@ -5,7 +5,6 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 import tempfile
-import base64
 import requests
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,7 +13,6 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
-    ConversationHandler,
     filters,
     ContextTypes
 )
@@ -35,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Bot Configuration
 BOT_TOKEN = "7954243581:AAFB_eQHGwCLRYTGeBwJ3gZWa1qtMDT76Bs"
-DEEPSEEK_API_KEY = "your-deepseek-api-key-here"  # Get from https://platform.deepseek.com/
+DEEPSEEK_API_KEY = "sk-your-deepseek-api-key-here"  # Get from https://platform.deepseek.com/
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 class StudyBot:
@@ -51,7 +49,6 @@ class StudyBot:
         """Extract text from image using OCR"""
         try:
             image = Image.open(image_path)
-            # Use both Arabic and English language packs
             text = pytesseract.image_to_string(image, lang='ara+eng')
             return text
         except Exception as e:
@@ -197,7 +194,6 @@ class StudyBot:
                 
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing JSON from DeepSeek: {e}")
-            logger.error(f"Response text: {response_text if 'response_text' in locals() else 'No response'}")
             return []
         except Exception as e:
             logger.error(f"Error generating questions: {e}")
@@ -207,7 +203,6 @@ class StudyBot:
         """Grade a single answer"""
         try:
             if question["type"] == "multiple_choice":
-                # Check if answer matches the letter
                 user_letter = user_answer.strip().upper()
                 if user_letter and user_letter[0] == question["correct_answer"]:
                     is_correct = True
@@ -240,7 +235,6 @@ class StudyBot:
                 }
                 
             elif question["type"] == "short_answer":
-                # Use DeepSeek to evaluate short answers
                 system_prompt = """You are an expert grader. Evaluate the student's answer against the model answer.
                 Be fair but strict. Consider partial credit for partially correct answers.
                 Return ONLY a JSON object, no other text."""
@@ -318,7 +312,6 @@ class StudyBot:
         total_earned = sum(g["score"] for g in grades)
         percentage = (total_earned / total_possible) * 100 if total_possible > 0 else 0
         
-        # Letter grade system
         if percentage >= 90:
             letter_grade = "A"
             emoji = "🏆"
@@ -374,7 +367,7 @@ _Your AI-powered study assistant | مساعدك الدراسي الذكي_
 3️⃣ Answer the questions
 4️⃣ Get your results!
 
-*Developed with DeepSeek AI | مطور باستخدام DeepSeek AI*
+*Powered by DeepSeek AI | مدعوم بـ DeepSeek AI*
 """
     
     keyboard = [
@@ -384,12 +377,11 @@ _Your AI-powered study assistant | مساعدك الدراسي الذكي_
         ],
         [
             InlineKeyboardButton("📊 My Stats | إحصائياتي", callback_data="show_stats"),
-            InlineKeyboardButton("🌍 Language | اللغة", callback_data="change_lang")
+            InlineKeyboardButton("❌ Cancel | إلغاء", callback_data="cancel_exam")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Try to send a welcome sticker if available
     await update.message.reply_text(
         welcome_message,
         reply_markup=reply_markup,
@@ -432,7 +424,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     document = update.message.document
     
-    # Check file size (max 20MB for Telegram)
     if document.file_size > 20 * 1024 * 1024:
         await update.message.reply_text(
             "❌ File too large! Please send files under 20MB.\n"
@@ -441,38 +432,29 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     processing_msg = await update.message.reply_text(
-        "📄 *Processing document...*\n"
-        "⏳ _Extracting text..._\n"
-        "🤖 _Analyzing content..._",
+        "📄 *Processing document...*\n⏳ _Extracting text..._\n🤖 _Analyzing content..._",
         parse_mode=ParseMode.MARKDOWN
     )
     
     file = await context.bot.get_file(document.file_id)
     
-    # Download file
     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(document.file_name)[1]) as tmp_file:
         await file.download_to_drive(tmp_file.name)
         file_path = tmp_file.name
     
-    # Extract text based on file type
     text = ""
     file_ext = document.file_name.lower()
     
     if file_ext.endswith('.pdf'):
-        await processing_msg.edit_text("📄 Processing PDF... | جاري معالجة PDF...")
         text = study_bot.extract_text_from_pdf(file_path)
     elif file_ext.endswith('.docx'):
-        await processing_msg.edit_text("📄 Processing DOCX... | جاري معالجة DOCX...")
         text = study_bot.extract_text_from_docx(file_path)
     elif file_ext.endswith('.txt'):
-        await processing_msg.edit_text("📄 Processing TXT... | جاري معالجة النص...")
         with open(file_path, 'r', encoding='utf-8') as f:
             text = f.read()
     elif file_ext.endswith(('.jpg', '.jpeg', '.png')):
-        await processing_msg.edit_text("🖼️ Processing image with OCR... | جاري معالجة الصورة...")
         text = study_bot.extract_text_from_image(file_path)
     
-    # Clean up temp file
     try:
         os.unlink(file_path)
     except:
@@ -480,23 +462,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if text.strip():
         await processing_msg.edit_text(
-            "✅ *Text extracted successfully!*\n"
-            "🤖 *Generating questions...*",
+            "✅ *Text extracted successfully!*\n🤖 *Generating questions...*",
             parse_mode=ParseMode.MARKDOWN
         )
         await process_content(update, context, text, processing_msg)
     else:
         await processing_msg.edit_text(
-            "❌ *Could not extract text from the file*\n"
-            "Please try:\n"
-            "• A different file format\n"
-            "• Sending the text directly\n"
-            "• A clearer image\n\n"
-            "❌ *لم أتمكن من استخراج النص*\n"
-            "يرجى تجربة:\n"
-            "• تنسيق ملف مختلف\n"
-            "• إرسال النص مباشرة\n"
-            "• صورة أوضح",
+            "❌ *Could not extract text from the file*\nPlease try a different format or send text directly.",
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -505,24 +477,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
     
-    # Check if user is in a session
     if user_id in study_bot.user_sessions:
         session = study_bot.user_sessions[user_id]
         
         if session["state"] == "waiting_for_content":
             if len(text) < 50:
                 await update.message.reply_text(
-                    "⚠️ *Text too short!*\n"
-                    "Please send more content (at least 50 characters) for meaningful questions.\n\n"
-                    "⚠️ *النص قصير جداً!*\n"
-                    "يرجى إرسال محتوى أكثر (50 حرفاً على الأقل) لأسئلة ذات معنى.",
+                    "⚠️ *Text too short!* Please send more content (at least 50 characters).",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
             
             processing_msg = await update.message.reply_text(
-                "🤖 *Analyzing content and generating questions...*\n"
-                "⏳ _This may take a moment..._",
+                "🤖 *Analyzing content and generating questions...*",
                 parse_mode=ParseMode.MARKDOWN
             )
             await process_content(update, context, text, processing_msg)
@@ -530,18 +497,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif session["state"] == "answering":
             await process_answer(update, context, text)
     else:
-        # Not in exam session, provide guidance
-        keyboard = [
-            [InlineKeyboardButton("📝 Start Exam | بدء اختبار", callback_data="start_exam")],
-            [InlineKeyboardButton("ℹ️ Help | مساعدة", callback_data="show_help")]
-        ]
+        keyboard = [[InlineKeyboardButton("📝 Start Exam | بدء اختبار", callback_data="start_exam")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
-            "👋 *Start an exam session first!*\n"
-            "Use /exam command or tap below:\n\n"
-            "👋 *ابدأ جلسة اختبار أولاً!*\n"
-            "استخدم الأمر /exam أو اضغط أدناه:",
+            "👋 *Start an exam session first!*\nUse /exam command or tap below:",
             reply_markup=reply_markup,
             parse_mode=ParseMode.MARKDOWN
         )
@@ -549,12 +509,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle photo messages"""
     processing_msg = await update.message.reply_text(
-        "📸 *Processing image...*\n"
-        "⏳ _Running OCR to extract text..._",
+        "📸 *Processing image...*\n⏳ _Running OCR to extract text..._",
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Download the largest photo
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
     
@@ -562,7 +520,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await file.download_to_drive(tmp_file.name)
         file_path = tmp_file.name
     
-    # Extract text from image
     text = study_bot.extract_text_from_image(file_path)
     
     try:
@@ -572,25 +529,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if text.strip():
         await processing_msg.edit_text(
-            "✅ *Text extracted from image!*\n"
-            "🤖 *Generating questions...*",
+            "✅ *Text extracted from image!*\n🤖 *Generating questions...*",
             parse_mode=ParseMode.MARKDOWN
         )
         await process_content(update, context, text, processing_msg)
     else:
         await processing_msg.edit_text(
-            "❌ *No text detected in image*\n"
-            "Please try:\n"
-            "• A clearer image\n"
-            "• Better lighting\n"
-            "• Text in a standard font\n"
-            "• Sending text directly\n\n"
-            "❌ *لم يتم اكتشاف نص في الصورة*\n"
-            "يرجى تجربة:\n"
-            "• صورة أوضح\n"
-            "• إضاءة أفضل\n"
-            "• نص بخط واضح\n"
-            "• إرسال النص مباشرة",
+            "❌ *No text detected in image*\nPlease try a clearer image or send text directly.",
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -599,15 +544,12 @@ async def process_content(update: Update, context: ContextTypes.DEFAULT_TYPE, co
     user_id = update.effective_user.id
     session = study_bot.user_sessions.get(user_id, {})
     
-    # Detect language
     has_arabic = any('\u0600' <= char <= '\u06ff' for char in content)
     language = "mixed" if has_arabic else "english"
     
-    # Store content for reference
-    session["content"] = content[:1000]  # Store first 1000 chars for context
+    session["content"] = content[:1000]
     session["language"] = language
     
-    # Generate questions
     questions = await study_bot.generate_questions(content, language)
     
     if questions and len(questions) > 0:
@@ -621,41 +563,23 @@ async def process_content(update: Update, context: ContextTypes.DEFAULT_TYPE, co
         if status_msg:
             await status_msg.delete()
         
-        # Send exam info
         await update.message.reply_text(
-            f"📝 *Exam Ready!*\n"
-            f"📊 Questions: {len(questions)}\n"
-            f"🌍 Language: {language.upper()}\n\n"
-            f"_Answer each question to the best of your ability._\n"
-            f"_Good luck! 🍀_",
+            f"📝 *Exam Ready!*\n📊 Questions: {len(questions)}\n🌍 Language: {language.upper()}\n\n_Good luck! 🍀_",
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # Send first question
         await send_question(update, context, questions[0], 0, len(questions))
     else:
         if status_msg:
             await status_msg.delete()
         
         await update.message.reply_text(
-            "❌ *Failed to generate questions*\n"
-            "This might be due to:\n"
-            "• Insufficient content\n"
-            "• API issues\n"
-            "• Content format problems\n\n"
-            "Please try with different content or format.\n\n"
-            "❌ *فشل في إنشاء الأسئلة*\n"
-            "قد يكون هذا بسبب:\n"
-            "• محتوى غير كافٍ\n"
-            "• مشاكل في API\n"
-            "• مشاكل في تنسيق المحتوى\n\n"
-            "يرجى المحاولة بمحتوى أو تنسيق مختلف.",
+            "❌ *Failed to generate questions*\nPlease try with different content or format.",
             parse_mode=ParseMode.MARKDOWN
         )
 
 async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE, question: Dict, q_num: int, total: int):
     """Send a question to the user"""
-    # Question type emoji
     type_emoji = {
         "multiple_choice": "🔤",
         "true_false": "✅",
@@ -673,16 +597,14 @@ async def send_question(update: Update, context: ContextTypes.DEFAULT_TYPE, ques
         message += "\n_Reply with the letter (A, B, C, or D)_"
         
     elif question["type"] == "true_false":
-        message += "`True` or `False`?\n"
-        message += "\n_Reply with True or False_"
+        message += "`True` or `False`?\n_Reply with True or False_"
         
     elif question["type"] == "short_answer":
         message += "_Write your answer in detail_ | _اكتب إجابتك بالتفصيل_"
     
-    # Add navigation buttons
     keyboard = []
     if q_num > 0:
-        keyboard.append(InlineKeyboardButton("⬅️ Skip | تخطي", callback_data="skip_question"))
+        keyboard.append(InlineKeyboardButton("⏭️ Skip | تخطي", callback_data="skip_question"))
     keyboard.append(InlineKeyboardButton("❌ End Exam | إنهاء", callback_data="end_exam"))
     
     reply_markup = InlineKeyboardMarkup([keyboard]) if keyboard else None
@@ -705,13 +627,11 @@ async def process_answer(update: Update, context: ContextTypes.DEFAULT_TYPE, ans
     
     question = session["questions"][current_q]
     
-    # Show grading indicator
     grading_msg = await update.message.reply_text(
         "🤖 *Grading your answer...* | *جاري تصحيح إجابتك...*",
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Grade the answer
     grade = await study_bot.grade_answer(question, answer)
     session["grades"].append(grade)
     session["answers"].append({
@@ -721,10 +641,8 @@ async def process_answer(update: Update, context: ContextTypes.DEFAULT_TYPE, ans
         "score": grade["score"]
     })
     
-    # Delete grading indicator
     await grading_msg.delete()
     
-    # Send feedback
     feedback_message = ""
     
     if grade["score"] == 100:
@@ -748,24 +666,16 @@ async def process_answer(update: Update, context: ContextTypes.DEFAULT_TYPE, ans
     if "explanation" in grade and grade["explanation"]:
         feedback_message += f"*Explanation:* _{grade['explanation']}_\n"
     
-    if "missing_points" in grade and grade["missing_points"]:
-        feedback_message += f"*Missing:* {grade['missing_points']}\n"
-    
     await update.message.reply_text(feedback_message, parse_mode=ParseMode.MARKDOWN)
     
-    # Move to next question or finish
     session["current_question"] += 1
     study_bot.user_sessions[user_id] = session
     
     if session["current_question"] < len(session["questions"]):
-        # Small delay before next question
         await asyncio.sleep(1)
-        
-        # Send next question
         next_q = session["questions"][session["current_question"]]
         await send_question(update, context, next_q, session["current_question"], len(session["questions"]))
     else:
-        # Exam finished
         await finish_exam(update, context)
 
 async def finish_exam(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -777,10 +687,8 @@ async def finish_exam(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No answers were recorded. Start a new exam with /exam")
         return
     
-    # Calculate final grade
     result = study_bot.calculate_final_grade(session["grades"])
     
-    # Calculate time taken
     time_taken = "N/A"
     if "start_time" in session:
         elapsed = datetime.now() - session["start_time"]
@@ -788,7 +696,6 @@ async def finish_exam(update: Update, context: ContextTypes.DEFAULT_TYPE):
         seconds = elapsed.seconds % 60
         time_taken = f"{minutes}m {seconds}s"
     
-    # Create detailed results message
     message = f"""
 {result['emoji']} *EXAM RESULTS | نتائج الاختبار* {result['emoji']}
 
@@ -804,10 +711,8 @@ async def finish_exam(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, (question, answer_data, grade) in enumerate(zip(
         session["questions"], session["answers"], session["grades"]
     ), 1):
-        # Truncate long questions
         q_text = question['question'][:80] + "..." if len(question['question']) > 80 else question['question']
         
-        # Score emoji
         if grade["score"] == 100:
             score_emoji = "✅"
         elif grade["score"] >= 50:
@@ -819,31 +724,24 @@ async def finish_exam(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += f"   Your Answer: `{answer_data['user_answer'][:50]}`\n"
         message += f"   Score: `{grade['score']}/100`\n"
     
-    # Performance message
     if result['percentage'] >= 90:
         message += "\n🏆 *Outstanding!* You've mastered this material!"
-        message += "\n🏆 *ممتاز!* لقد أتقنت هذه المادة!"
     elif result['percentage'] >= 80:
         message += "\n🌟 *Great job!* You have a strong understanding!"
-        message += "\n🌟 *عمل رائع!* لديك فهم قوي!"
     elif result['percentage'] >= 70:
         message += "\n👍 *Good work!* Keep practicing to improve!"
-        message += "\n👍 *عمل جيد!* استمر في الممارسة للتحسن!"
     elif result['percentage'] >= 60:
         message += "\n📚 *Fair effort!* Review the material and try again!"
-        message += "\n📚 *جهد مقبول!* راجع المادة وحاول مرة أخرى!"
     else:
         message += "\n💪 *Keep studying!* Review the corrections and try again!"
-        message += "\n💪 *واصل الدراسة!* راجع التصحيحات وحاول مرة أخرى!"
     
-    # Add action buttons
     keyboard = [
         [
             InlineKeyboardButton("📝 New Exam | اختبار جديد", callback_data="start_exam"),
-            InlineKeyboardButton("🔄 Retry Same | إعادة", callback_data="retry_exam")
+            InlineKeyboardButton("🔄 Retry | إعادة", callback_data="retry_exam")
         ],
         [
-            InlineKeyboardButton("📊 Detailed Review | مراجعة مفصلة", callback_data="detailed_review"),
+            InlineKeyboardButton("📊 Review | مراجعة", callback_data="detailed_review"),
             InlineKeyboardButton("📤 Share | مشاركة", callback_data="share_results")
         ]
     ]
@@ -855,7 +753,6 @@ async def finish_exam(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Clean up session (but keep for review)
     session["state"] = "completed"
     session["results"] = result
     study_bot.user_sessions[user_id] = session
@@ -877,9 +774,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "start_time": datetime.now()
         }
         await query.edit_message_text(
-            "📚 *New Exam Session*\n\n"
-            "Send me your study material to begin!\n"
-            "أرسل لي المادة الدراسية للبدء!",
+            "📚 *New Exam Session*\n\nSend me your study material to begin!\nأرسل لي المادة الدراسية للبدء!",
             parse_mode=ParseMode.MARKDOWN
         )
     
@@ -908,7 +803,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /exam - New exam
 /help - This help
 /cancel - Cancel exam
-/stats - View progress
 
 *Tips:*
 • Send clear, readable content
@@ -922,10 +816,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "show_stats":
         await query.edit_message_text(
-            "📊 *Statistics feature coming soon!*\n"
-            "Complete more exams to track your progress.\n\n"
-            "📊 *ميزة الإحصائيات قريباً!*\n"
-            "أكمل المزيد من الاختبارات لتتبع تقدمك.",
+            "📊 *Statistics feature coming soon!*\nComplete more exams to track your progress.",
             parse_mode=ParseMode.MARKDOWN
         )
     
@@ -933,17 +824,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id in study_bot.user_sessions:
             del study_bot.user_sessions[user_id]
         await query.edit_message_text(
-            "✅ *Exam cancelled*\n"
-            "Use /exam to start a new one.\n\n"
-            "✅ *تم إلغاء الاختبار*\n"
-            "استخدم /exam لبدء اختبار جديد.",
+            "✅ *Exam cancelled*\nUse /exam to start a new one.",
             parse_mode=ParseMode.MARKDOWN
         )
     
     elif query.data == "skip_question":
         session = study_bot.user_sessions.get(user_id)
         if session and session["state"] == "answering":
-            # Give 0 for skipped question
             session["grades"].append({
                 "score": 0,
                 "feedback": "Question skipped",
@@ -960,14 +847,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session["current_question"] += 1
             
             if session["current_question"] < len(session["questions"]):
-                # Show next question
                 next_q = session["questions"][session["current_question"]]
                 await query.edit_message_text("⏭️ Question skipped! Moving to next...")
                 await asyncio.sleep(1)
-                await send_question_from_callback(query, context, next_q, session["current_question"], len(session["questions"]))
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"🔤 *Question {session['current_question'] + 1}/{len(session['questions'])}*\n\n*{next_q['question']}*",
+                    parse_mode=ParseMode.MARKDOWN
+                )
             else:
                 await query.edit_message_text("📝 Exam complete! Calculating results...")
-                await finish_exam_from_callback(query, context)
+                await asyncio.sleep(1)
+                # Simplified finish for callback
+                result = study_bot.calculate_final_grade(session["grades"])
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"📊 *Results:* {result['total_score']} - {result['percentage']}% - Grade: {result['letter_grade']}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
             
             study_bot.user_sessions[user_id] = session
     
@@ -975,7 +872,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session = study_bot.user_sessions.get(user_id)
         if session and session["state"] == "answering":
             await query.edit_message_text("📝 Ending exam... Calculating results...")
-            await finish_exam_from_callback(query, context)
+            await asyncio.sleep(1)
+            result = study_bot.calculate_final_grade(session["grades"])
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"📊 *Results:* {result['total_score']} - {result['percentage']}% - Grade: {result['letter_grade']}",
+                parse_mode=ParseMode.MARKDOWN
+            )
     
     elif query.data == "retry_exam":
         session = study_bot.user_sessions.get(user_id)
@@ -991,7 +894,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 first_q = session["questions"][0]
                 await query.edit_message_text("🔄 *Retrying exam... Good luck!*", parse_mode=ParseMode.MARKDOWN)
                 await asyncio.sleep(1)
-                await send_question_from_callback(query, context, first_q, 0, len(session["questions"]))
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"🔤 *Question 1/{len(session['questions'])}*\n\n*{first_q['question']}*",
+                    parse_mode=ParseMode.MARKDOWN
+                )
     
     elif query.data == "detailed_review":
         session = study_bot.user_sessions.get(user_id)
@@ -1012,79 +919,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "share_results":
         await query.edit_message_text(
-            "📤 *Share feature coming soon!*\n"
-            "You'll be able to share your results with friends.\n\n"
-            "📤 *ميزة المشاركة قريباً!*\n"
-            "ستتمكن من مشاركة نتائجك مع الأصدقاء.",
+            "📤 *Share feature coming soon!*\nYou'll be able to share your results with friends.",
             parse_mode=ParseMode.MARKDOWN
         )
-
-async def send_question_from_callback(query, context, question, q_num, total):
-    """Send question from callback query"""
-    type_emoji = {
-        "multiple_choice": "🔤",
-        "true_false": "✅",
-        "short_answer": "✍️"
-    }
-    
-    emoji = type_emoji.get(question["type"], "❓")
-    
-    message = f"{emoji} *Question {q_num + 1}/{total}*\n\n"
-    message += f"*{question['question']}*\n\n"
-    
-    if question["type"] == "multiple_choice":
-        for option in question["options"]:
-            message += f"`{option}`\n"
-        message += "\n_Reply with the letter (A, B, C, or D)_"
-    elif question["type"] == "true_false":
-        message += "`True` or `False`?\n_Reply with True or False_"
-    elif question["type"] == "short_answer":
-        message += "_Write your answer in detail_"
-    
-    keyboard = [[InlineKeyboardButton("❌ End Exam | إنهاء", callback_data="end_exam")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=message,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-async def finish_exam_from_callback(query, context):
-    """Finish exam from callback"""
-    user_id = query.from_user.id
-    session = study_bot.user_sessions.get(user_id, {})
-    
-    if not session.get("grades"):
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text="No answers recorded."
-        )
-        return
-    
-    result = study_bot.calculate_final_grade(session["grades"])
-    
-    message = f"""
-{result['emoji']} *EXAM RESULTS | نتائج الاختبار* {result['emoji']}
-
-📊 *Overall Performance:*
-• Total Score: `{result['total_score']}`
-• Percentage: `{result['percentage']}%`
-• Grade: `{result['letter_grade']}`
-
-Use /exam to start a new exam!
-"""
-    
-    keyboard = [[InlineKeyboardButton("📝 New Exam | اختبار جديد", callback_data="start_exam")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=message,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN
-    )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Help command handler"""
@@ -1108,59 +945,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • True/False
 • Short Answer
 
-*Need more help?*
-Contact: @your_support_username
+*Powered by DeepSeek AI*
 """
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
-async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel current operation"""
-    user_id = update.effective_user.id
-    if user_id in study_bot.user_sessions:
-        del study_bot.user_sessions[user_id]
-    
-    keyboard = [[InlineKeyboardButton("📝 New Exam | اختبار جديد", callback_data="start_exam")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "✅ *Operation cancelled*\n"
-        "Start a new exam anytime with /exam\n\n"
-        "✅ *تم إلغاء العملية*\n"
-        "ابدأ اختباراً جديداً في أي وقت باستخدام /exam",
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-def main():
-    """Main function to run the bot"""
-    # Check for API key
-    if DEEPSEEK_API_KEY == "your-deepseek-api-key-here":
-        print("⚠️ WARNING: Please set your DeepSeek API key in the code!")
-        print("Get your API key from: https://platform.deepseek.com/")
-        print("The bot will start but question generation will fail without a valid API key.\n")
-    
-    # Create application
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Add command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("exam", exam_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("cancel", cancel_command))
-    
-    # Add message handlers
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    
-    # Add callback query handler
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
-    # Start the bot
-    print("🤖 Study Bot is starting...")
-    print("✅ Bot is now running! Press Ctrl+C to stop.")
-    print("📱 Open Telegram and send /start to your bot!")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT
