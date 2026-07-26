@@ -949,4 +949,45 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
-async def cancel_command(update: Update, context: ContextTypes.DEFAULT
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel current operation"""
+    user_id = update.effective_user.id
+    if user_id in study_bot.user_sessions:
+        del study_bot.user_sessions[user_id]
+    
+    keyboard = [[InlineKeyboardButton("📝 New Exam | اختبار جديد", callback_data="start_exam")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "✅ *Operation cancelled*\nStart a new exam anytime with /exam",
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+def main():
+    """Main function to run the bot"""
+    if DEEPSEEK_API_KEY == "sk-your-deepseek-api-key-here":
+        print("⚠️ WARNING: Please set your DeepSeek API key in the code!")
+        print("Get your API key from: https://platform.deepseek.com/")
+        print("The bot will start but question generation will fail without a valid API key.\n")
+    
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("exam", exam_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
+    
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    print("🤖 Study Bot is starting...")
+    print("✅ Bot is now running! Press Ctrl+C to stop.")
+    print("📱 Open Telegram and send /start to your bot!")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
