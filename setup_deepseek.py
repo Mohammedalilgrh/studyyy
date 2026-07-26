@@ -1,4 +1,3 @@
-# setup_deepseek.py
 import subprocess
 import sys
 import os
@@ -10,7 +9,6 @@ def setup_bot():
     print("🔧 STUDY BOT SETUP | إعداد بوت الدراسة")
     print("=" * 50)
     
-    # Install required packages
     print("\n📦 Installing Python packages...")
     packages = [
         "python-telegram-bot==20.7",
@@ -30,7 +28,6 @@ def setup_bot():
     
     print("\n✅ Python packages installed!")
     
-    # Check for Tesseract OCR
     print("\n🔍 Checking for Tesseract OCR...")
     try:
         import pytesseract
@@ -45,18 +42,16 @@ def setup_bot():
         print("  Also install Arabic language data:")
         print("  sudo apt-get install tesseract-ocr-ara")
     
-    # DeepSeek API Key
     print("\n🔑 DEEPSEEK API SETUP:")
     print("1. Go to https://platform.deepseek.com/")
     print("2. Sign up or log in")
     print("3. Go to API Keys section")
     print("4. Create a new API key")
     print("5. Copy the API key")
-    print("\n6. Open the bot file and replace:")
-    print('   DEEPSEEK_API_KEY = "your-deepseek-api-key-here"')
+    print("\n6. Open study_bot_deepseek.py and replace:")
+    print('   DEEPSEEK_API_KEY = "sk-your-deepseek-api-key-here"')
     print("   with your actual API key")
     
-    # Create requirements file
     with open('requirements_deepseek.txt', 'w') as f:
         f.write("python-telegram-bot==20.7\n")
         f.write("requests>=2.28.0\n")
@@ -67,7 +62,6 @@ def setup_bot():
     
     print("\n📁 Created requirements_deepseek.txt")
     
-    # Bot token check
     print("\n🤖 BOT TOKEN:")
     print("Your bot token is already configured:")
     print("7954243581:AAFB_eQHGwCLRYTGeBwJ3gZWa1qtMDT76Bs")
